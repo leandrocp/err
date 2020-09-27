@@ -5,7 +5,7 @@
 
 Err is a tiny library for dealing with errors. A more detailed explanation is available at [Leveraging Exceptions to handle errors in Elixir](https://leandrocp.com.br/2020/08/leveraging-exceptions-to-handle-errors-in-elixir/), or just keep reading for an example of usage.
 
-[Documentation](https://hexdocs.pm/err)
+[Documentation](https://hexdocs.pm/err) | [Package](https://hex.pm/packages/err)
 
 Note: this library is still **experimental** and the API may change.
 
