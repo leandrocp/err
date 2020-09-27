@@ -16,6 +16,8 @@ defmodule Err.MixProject do
       # Hex
       package: package(),
       description: "A tiny library for dealing with errors.",
+      source_url: @repo_url,
+      homepage_url: @repo_url,
 
       # Docs
       name: @name,
@@ -40,7 +42,7 @@ defmodule Err.MixProject do
   defp package do
     [
       maintainers: ["Leandro Pereira"],
-      licenses: ["Apache 2.0"],
+      licenses: ["MIT"],
       links: %{"GitHub" => @repo_url}
     ]
   end
