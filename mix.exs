@@ -9,7 +9,7 @@ defmodule Err.MixProject do
     [
       app: :err,
       version: @version,
-      elixir: "~> 1.10",
+      elixir: "~> 1.6",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
 
@@ -35,13 +35,13 @@ defmodule Err.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ex_doc, ">= 0.19.0", only: :docs}
+      {:ex_doc, ">= 0.22.0", only: :dev, runtime: false}
     ]
   end
 
   defp package do
     [
-      maintainers: ["Leandro Pereira"],
+      maintainers: ["Leandro Cesquini Pereira"],
       licenses: ["MIT"],
       links: %{"GitHub" => @repo_url}
     ]
