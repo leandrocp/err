@@ -23,7 +23,7 @@ end
 
 ## Usage
 
-At this moment the lib is composed of two functions: `wrap/2` and `message/1`, and as the name suggest the former will wrap an exception and its options and the the latter will format a friendly message to you:
+At this moment the lib is composed of two functions: `wrap/2` and `message/1`, and as the name suggest the former will wrap an exception and its options and the the latter will format an exception into a friendly message for you:
 
 ```elixir
 iex> Err.wrap(KeyError, key: :id)
@@ -39,7 +39,7 @@ iex> Err.wrap(reason: :invalid_user) |> Err.message()
 "generic error :invalid_user"
 ```
 
-Ok, but why not just build and call exception directly? Having a single and common API allows to have custom logic like building an `Err.GenericError`, or extend it to support more features, and also having a single API to deal with errors.
+Ok, but why not just build and call exception directly? Having a single and common API allows to have custom logic like building an `Err.GenericError` or extend it to support more features, and also it's a benefit having a single API to deal with errors.
 
 ## Complete example
 
@@ -123,7 +123,7 @@ Logger.error(fn -> inspect(error) end)
 raise error
 ```
 
-Because there's no interface to display, the best you can do is raise or log something.
+Because in this case, there's no interface to display, so the best you can do is raise or log something.
 
 Another benefit is wrapping a generic error with a related module:
 
