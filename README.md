@@ -39,7 +39,12 @@ iex> Err.wrap(reason: :invalid_user) |> Err.message()
 "generic error :invalid_user"
 ```
 
-Ok, but why not just build and call exception directly? Having a single and common API allows to have custom logic like building an `Err.GenericError` or extend it to support more features, and also it's a benefit having a single API to deal with errors.
+Ok, but why not just build and call exception directly? Well, a couple of reasons:
+
+- Having a single and common API allows to have custom logic like building an `Err.GenericError`;
+- Possibility to extend the public API to support more features without breaking or requiring changes on your code (at least not much);
+- Having a single API to deal with errors;
+- Ease the building of exceptions;
 
 ## Complete example
 
