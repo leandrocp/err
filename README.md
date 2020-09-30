@@ -61,11 +61,11 @@ end
 defmodule MyApp.DataIngestion do
   @doc """
     Some complex function that needs to deal with different errors.
-    Keep in mind that's just an example to show how to use the Err API.
+    Keep in mind that this is just an example to show how to use the Err API.
   """
   @spec import(User.t, Path.t) :: {:ok, map()} | {:error, Err.t}
   def import(current_user, csv_file_path) do
-    with {:check_permission, true} <- {:check_permission, Auth.can?(current_user, :import},
+    with {:check_permission, true} <- {:check_permission, MyApp.Auth.can?(current_user, :import},
          {:read_file, {:ok, contet}} <- {:read_file, File.read(csv_file_path)},
          {:import, {:ok, data}} <- {:import, do_import(content)} do
       {:ok, data}
@@ -85,11 +85,11 @@ def MyAppWeb.DataIngestionLive do
   def handle_event("import", %{"csv_file_path" => csv_file_path}, socket) do
     case MyApp.DataIngestion.import(socket.assigns.current_user, csv_file_path) do
       {:ok, _} ->
-        put_flash(socket, :info, "File imported!")
+        {:noreply, put_flash(socket, :info, "File imported!")}
 
       {:ok, error} ->
         # could be either a error related to permission, file, or import.
-        put_flash(socket, :error, Err.message(error))
+        {:noreply, put_flash(socket, :error, Err.message(error))}
     end
   end
 end
