@@ -1,9 +1,9 @@
 # Err
 
-> Too err is human.
-> - Everyone after making a mistake.
+Err is a tiny library for dealing with errors. A more detailed explanation is available at [Leveraging Exceptions to handle errors in Elixir](https://leandrocp.com.br/2020/08/leveraging-exceptions-to-handle-errors-in-elixir/).
 
-Err is a tiny library for dealing with errors. A more detailed explanation is available at [Leveraging Exceptions to handle errors in Elixir](https://leandrocp.com.br/2020/08/leveraging-exceptions-to-handle-errors-in-elixir/), or just keep reading for an example of usage.
+> "Too err is human."
+> - Everyone after making a mistake.
 
 [Documentation](https://hexdocs.pm/err) | [Package](https://hex.pm/packages/err)
 
@@ -23,13 +23,35 @@ end
 
 ## Usage
 
-The main idea is to wrap exceptions, either from Elixir standard library, third-party libraries, or defined in your app. Those exceptions can be used to `raise` or to display a message by calling `Err.message/1`, so instead of spreading atoms or strings as errors in your app, you can rely on `Err` functions to handle it.
+At this moment the lib is composed of two functions: `wrap/2` and `message/1`, and as the name suggest the former will wrap an exception and its options and the the latter will format a friendly message to you:
+
+```elixir
+iex> Err.wrap(KeyError, key: :id)
+%KeyError{key: :id, message: nil, term: nil}
+
+iex> Err.wrap(KeyError, key: :id) |> Err.message()
+"key :id not found
+
+iex> Err.wrap(reason: :invalid_user)
+%Err.GenericError{changeset: nil, mod: nil, reason: :invalid_user}
+
+iex> Err.wrap(reason: :invalid_user) |> Err.message()
+"generic error :invalid_user"
+```
+
+Ok, but why not just build and call exception directly? Having a single and common API allows to have custom logic like building an `Err.GenericError`, or extend it to support more features, and also having a single API to deal with errors.
+
+## Complete example
+
+The main idea is to wrap exceptions, either from Elixir standard library, third-party libraries, or defined in your app. Those exceptions can be used to `raise` or to display a message by calling `Err.message/1`, so instead of spreading atoms or strings as errors in your app, you can rely on `Err` functions to handle it:
 
 
 ```elixir
 defmodule MyApp.Auth do
   # Just an example
-  def can?(current_user, permission)
+  def can?(current_user, permission) do
+    # code here to check permission
+  end
 
   def format_error(:insufficient_permissions) do
     "Unable to perform action due to insufficient permissions."
@@ -39,7 +61,7 @@ end
 defmodule MyApp.DataIngestion do
   @doc """
     Some complex function that needs to deal with different errors.
-    Keep in mind that's just an example to show how to use Err API.
+    Keep in mind that's just an example to show how to use the Err API.
   """
   @spec import(User.t, Path.t) :: {:ok, map()} | {:error, Err.t}
   def import(current_user, csv_file_path) do
@@ -73,22 +95,46 @@ def MyAppWeb.DataIngestionLive do
 end
 ```
 
-Let's understand what's happening in this example.
+In case something unexpected happens, that function may return different errors:
 
-The example function `MyApp.DataIngestion.import/2` may cause different errors: user may not have permission to perfom that import, file may be missing or corrupt, the import routine may fail for whatever reason. Each one of those situations are captured by `Err.wrap` but with its own details:
+```elixir
+iex> {:error, error} = MyApp.DataIngestion.import(current_user, "/data/import.csv")
+iex> Err.message(error)
+```
 
-`Err.wrap(mod: MyApp.Auth, reason: :insufficient_permissions)`
+Possible outcomes:
 
-Returns a generic error that will call `MyApp.Auth.format_error/1` function to return a formatted message for that `reason`.
+1. "Unable to perform action due to insufficient permissions."
+2. "could not read file \"/data/import.csv\": no such file or directory"
+3. whatever error message is returned by `do_import`
 
-`Err.wrap(reason: reason)`
- 
-Another generic error but this time it will be formatted by `Err.Generic.message/1` so you don't need to handle it. It's the most simple kind of error.
+Meaning it's responsibility of the business logic or context to define the error and what should be displayed for the user.
 
-`Err.wrap(File.Error, action: "read file", reason: reason, path: csv_file_path)`
+In a LiveView, Controller, CLI, etc. you would call something like:
 
-Leverages the Elixir exception `File.Error` to return the proper message of what happened when reading that file.
+```elixir
+put_flash(socket, :error, Err.message(error))
+```
 
-And finally to display the right message to the user, just call `Err.message(error)`.
+Or if that function is also called by a background worker, you could call:
 
-Note that `:insufficient_permissions` probably is an error that happens a lot in many different places so you don't need to duplicate that message everywhere, also your web layer doesn't need to know about the error, its only responsibility is to display the error that was already defined by your context or lib layer.
+```elixir
+Logger.error(fn -> inspect(error) end)
+raise error
+```
+
+Because there's no interface to display, the best you can do is raise or log something.
+
+Another benefit is wrapping a generic error with a related module:
+
+```elixir
+Err.wrap(mod: MyApp.Auth, reason: :insufficient_permissions)
+```
+
+That kind of error happens everywhere but there's no need to duplicate the same error message over and over again. The function `MyApp.Auth.format_error(:insufficient_permissions)` will be called to resolve that message so it can be reused.
+
+## TODO
+
+- Add specs
+- Explain the usage of changesets
+- Validate exceptions and fields
