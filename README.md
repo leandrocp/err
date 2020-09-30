@@ -30,7 +30,7 @@ iex> Err.wrap(KeyError, key: :id)
 %KeyError{key: :id, message: nil, term: nil}
 
 iex> Err.wrap(KeyError, key: :id) |> Err.message()
-"key :id not found
+"key :id not found"
 
 iex> Err.wrap(reason: :invalid_user)
 %Err.GenericError{changeset: nil, mod: nil, reason: :invalid_user}
