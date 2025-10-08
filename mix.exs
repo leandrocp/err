@@ -1,57 +1,78 @@
 defmodule Err.MixProject do
   use Mix.Project
 
-  @name "Err"
-  @version "0.1.0"
-  @repo_url "https://github.com/leandrocp/err"
+  @source_url "https://github.com/leandrocp/err"
+  @version "0.2.0-dev"
 
   def project do
     [
       app: :err,
       version: @version,
-      elixir: "~> 1.6",
+      elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
-      deps: deps(),
-
-      # Hex
       package: package(),
-      description: "A tiny library for dealing with errors.",
-      source_url: @repo_url,
-      homepage_url: @repo_url,
-
-      # Docs
-      name: @name,
-      docs: docs()
+      docs: docs(),
+      deps: deps(),
+      aliases: aliases(),
+      name: "Err",
+      source_url: @source_url,
+      description: "A tiny library for dealing with errors."
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       extra_applications: [:logger]
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
-  defp deps do
+  def cli do
     [
-      {:ex_doc, ">= 0.22.0", only: :dev, runtime: false}
+      preferred_envs: [
+        docs: :docs,
+        "hex.publish": :docs
+      ]
     ]
   end
 
   defp package do
     [
-      maintainers: ["Leandro Cesquini Pereira"],
+      maintainers: ["Leandro Pereira"],
       licenses: ["MIT"],
-      links: %{"GitHub" => @repo_url}
+      links: %{
+        Changelog: "https://hexdocs.pm/err/changelog.html",
+        GitHub: @source_url
+      },
+      files: [
+        "mix.exs",
+        "lib",
+        "priv",
+        "README.md",
+        "LICENSE",
+        "CHANGELOG.md"
+      ]
     ]
   end
 
   defp docs do
     [
-      main: @name,
+      main: "Err",
       source_ref: "v#{@version}",
-      source_url: @repo_url
+      source_url: @source_url,
+      extras: ["CHANGELOG.md"],
+      skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
+    ]
+  end
+
+  defp deps do
+    [
+      {:ex_doc, ">= 0.0.0", only: :docs}
+    ]
+  end
+
+  defp aliases do
+    [
+      setup: ["deps.get", "compile"]
     ]
   end
 end

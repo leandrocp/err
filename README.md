@@ -1,145 +1,140 @@
 # Err
 
-Err is a tiny library for dealing with errors. A more detailed explanation is available at [Leveraging Exceptions to handle errors in Elixir](https://leandrocp.com.br/2020/08/leveraging-exceptions-to-handle-errors-in-elixir/).
+[![Hex.pm](https://img.shields.io/hexpm/v/err.svg)](https://hex.pm/packages/err)
+[![Docs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/err)
 
-> "Too err is human."
-> - Everyone after making a mistake.
+<!-- MDOC -->
 
-[Documentation](https://hexdocs.pm/err) | [Package](https://hex.pm/packages/err)
+**Err** is a tiny library that makes working with tagged `{:ok, value}` and `{:error, reason}` tagged tuples more ergonomic and expressive in Elixir.
 
-Note: this library is still **experimental** and the API may change.
+It follows a simple design to permit using it in existing codebases without changing existing code:
+
+- Tuples `{:ok, _}` (of any size) are considered a success result.
+- Tuples `{:error, _}` (of any size) are considered an error result.
+- `nil` is considered "none" or empty.
+- Any other value is considered "some" value
+
+Inspired by Rust's [Result](https://doc.rust-lang.org/std/result/enum.Result.html)/[Option](https://doc.rust-lang.org/std/option/enum.Option.html) and Gleam's [result](https://hexdocs.pm/gleam_stdlib/gleam/result.html)/[option](https://hexdocs.pm/gleam_stdlib/gleam/option.html).
+
+## Features
+
+- ⛓ **Composable** - Chain operations with `map`, `and_then`, `or_else`
+- 🔌 **Drop-in compatibility** - Handles existing tagged tuples `:ok`/`:error` of any size and `nil` values. No need to introduce `%Result{}` structs or special atoms.
+- ✨ **Just functions** - No complex custom pipe operators or DSL
+- 🪶 **Zero dependencies** - Lightweight and fast
+- 📦 **List operations** - Combine results with `all`, extract with `values`, split with `partition`
+- ⚡ **Lazy evaluation** - Avoid computation with `_lazy` variants
+- 🔄 **Transformations** - Replace, flatten, and transform results
 
 ## Installation
 
-You can install `err` by adding it to your list of dependencies in mix.exs:
+Add `err` to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:err, "~> 0.1.0"}
+    {:err, "~> 0.2.0"}
   ]
 end
 ```
 
 ## Usage
 
-At this moment the lib is composed of two functions: `wrap/2` and `message/1`, and as the name suggest the former will wrap an exception and its options and the the latter will format an exception into a friendly message for you:
+*Wrap values*
 
-```elixir
-iex> Err.wrap(KeyError, key: :id)
-%KeyError{key: :id, message: nil, term: nil}
+    iex> Err.ok(42)
+    {:ok, 42}
 
-iex> Err.wrap(KeyError, key: :id) |> Err.message()
-"key :id not found"
+    iex> Err.error(:timeout)
+    {:error, :timeout}
 
-iex> Err.wrap(reason: :invalid_user)
-%Err.GenericError{changeset: nil, mod: nil, reason: :invalid_user}
+*Unwrap with defaults*
 
-iex> Err.wrap(reason: :invalid_user) |> Err.message()
-"generic error :invalid_user"
-```
+    iex> Err.unwrap_or({:ok, "config.json"}, "default.json")
+    "config.json"
 
-Ok, but why not just build and call exception directly? Well, a couple of reasons:
+    iex> Err.unwrap_or({:error, :not_found}, "default.json")
+    "default.json"
 
-- Having a single and common API allows to have custom logic like building an `Err.GenericError`;
-- Possibility to extend the public API to support more features without breaking or requiring changes on your code (at least not much);
-- Having a single API to deal with errors;
-- Ease the building of exceptions;
+*Lazy unwrapping (function only called when needed)*
 
-## Complete example
+    Err.unwrap_or_lazy({:error, :enoent}, fn reason ->
+      "Error: #{reason}"
+    end)
+    "Error: enoent"
 
-The main idea is to wrap exceptions, either from Elixir standard library, third-party libraries, or defined in your app. Those exceptions can be used to `raise` or to display a message by calling `Err.message/1`, so instead of spreading atoms or strings as errors in your app, you can rely on `Err` functions to handle it:
+*Transform success values*
+
+    iex> Err.map({:ok, 5}, fn num -> num * 2 end)
+    {:ok, 10}
+
+*Transform error values*
+
+    iex> Err.map_err({:error, :timeout}, fn reason -> "#{reason}_error" end)
+    {:error, "timeout_error"}
+
+*Chain operations*
+
+    iex> Err.and_then({:ok, 5}, fn num -> {:ok, num * 2} end)
+    {:ok, 10}
+
+*Flatten nested results*
+
+    iex> Err.flatten({:ok, {:ok, 1}})
+    {:ok, 1}
 
 
-```elixir
-defmodule MyApp.Auth do
-  # Just an example
-  def can?(current_user, permission) do
-    # code here to check permission
-  end
+*Eager fallback*
 
-  def format_error(:insufficient_permissions) do
-    "Unable to perform action due to insufficient permissions."
-  end
-end
+    iex> Err.or_else({:error, :cache_miss}, {:ok, "disk.db"})
+    {:ok, "disk.db"}
 
-defmodule MyApp.DataIngestion do
-  @doc """
-    Some complex function that needs to deal with different errors.
-    Keep in mind that this is just an example to show how to use the Err API.
-  """
-  @spec import(User.t, Path.t) :: {:ok, map()} | {:error, Err.t}
-  def import(current_user, csv_file_path) do
-    with {:check_permission, true} <- {:check_permission, MyApp.Auth.can?(current_user, :import},
-         {:read_file, {:ok, contet}} <- {:read_file, File.read(csv_file_path)},
-         {:import, {:ok, data}} <- {:import, do_import(content)} do
-      {:ok, data}
-    else
-      {:check_permission, _} ->
-        {:error, Err.wrap(mod: MyApp.Auth, reason: :insufficient_permissions)}
+*Lazy fallback*
 
-      {:read_file, {:error, reason}} ->
-        {:error, Err.wrap(File.Error, action: "read file", reason: reason, path: csv_file_path)}
+    Err.or_else_lazy({:error, :cache_miss}, fn _reason ->
+      {:ok, load_from_disk()}
+    end)
 
-      {:import, {:error, reason}} ->
-        {:error, Err.wrap(reason: reason)}
-  end
-end
+*Combine results (fail fast)*
 
-def MyAppWeb.DataIngestionLive do
-  def handle_event("import", %{"csv_file_path" => csv_file_path}, socket) do
-    case MyApp.DataIngestion.import(socket.assigns.current_user, csv_file_path) do
-      {:ok, _} ->
-        {:noreply, put_flash(socket, :info, "File imported!")}
+    iex> Err.all([{:ok, 1}, {:ok, 2}, {:ok, 3}])
+    {:ok, [1, 2, 3]}
 
-      {:ok, error} ->
-        # could be either a error related to permission, file, or import.
-        {:noreply, put_flash(socket, :error, Err.message(error))}
+    iex> Err.all([{:ok, 1}, {:error, :timeout}])
+    {:error, :timeout}
+
+*Extract ok values*
+
+    iex> Err.values([{:ok, 1}, {:error, :x}, {:ok, 2}])
+    [1, 2]
+
+*Split into ok and error lists*
+
+    iex> Err.partition([{:ok, 1}, {:error, "a"}, {:ok, 2}])
+    {[1, 2], ["a"]}
+
+*Check if result is ok*
+
+    def process(result) when Err.is_ok(result) do
+      # handle ok
     end
-  end
+
+*Check if result is error*
+
+    def process(result) when Err.is_err(result) do
+      # handle error
+    end
+
+### Real-World Example
+
+```elixir
+def fetch_user_profile(user_id) do
+  user_id
+  |> fetch_user()
+  |> Err.and_then(&load_profile/1)
+  |> Err.and_then(&enrich_with_stats/1)
+  |> Err.or_else_lazy(fn _error ->
+    {:ok, %{name: "Guest", stats: %{}}}
+  end)
 end
 ```
-
-In case something unexpected happens, that function may return different errors:
-
-```elixir
-iex> {:error, error} = MyApp.DataIngestion.import(current_user, "/data/import.csv")
-iex> Err.message(error)
-```
-
-Possible outcomes:
-
-1. "Unable to perform action due to insufficient permissions."
-2. "could not read file \"/data/import.csv\": no such file or directory"
-3. whatever error message is returned by `do_import`
-
-Meaning it's responsibility of the business logic or context to define the error and what should be displayed for the user.
-
-In a LiveView, Controller, CLI, etc. you would call something like:
-
-```elixir
-put_flash(socket, :error, Err.message(error))
-```
-
-Or if that function is also called by a background worker, you could call:
-
-```elixir
-Logger.error(fn -> inspect(error) end)
-raise error
-```
-
-Because in this case, there's no interface to display, so the best you can do is raise or log something.
-
-Another benefit is wrapping a generic error with a related module:
-
-```elixir
-Err.wrap(mod: MyApp.Auth, reason: :insufficient_permissions)
-```
-
-That kind of error happens everywhere but there's no need to duplicate the same error message over and over again. The function `MyApp.Auth.format_error(:insufficient_permissions)` will be called to resolve that message so it can be reused.
-
-## TODO
-
-- Add specs
-- Explain the usage of changesets
-- Validate exceptions and fields
