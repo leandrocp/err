@@ -47,7 +47,6 @@ defmodule Err.MixProject do
       files: [
         "mix.exs",
         "lib",
-        "priv",
         "README.md",
         "LICENSE",
         "CHANGELOG.md"
