@@ -33,7 +33,7 @@ Add `err` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:err, "~> 0.2.0"}
+    {:err, "~> 0.2"}
   ]
 end
 ```
@@ -42,88 +42,113 @@ end
 
 *Wrap values*
 
-    iex> Err.ok(42)
-    {:ok, 42}
+```elixir
+iex> Err.ok(42)
+{:ok, 42}
 
-    iex> Err.error(:timeout)
-    {:error, :timeout}
+iex> Err.error(:timeout)
+{:error, :timeout}
+```
 
 *Unwrap with defaults*
 
-    iex> Err.unwrap_or({:ok, "config.json"}, "default.json")
-    "config.json"
+```elixir
+iex> Err.unwrap_or({:ok, "config.json"}, "default.json")
+"config.json"
 
-    iex> Err.unwrap_or({:error, :not_found}, "default.json")
-    "default.json"
+iex> Err.unwrap_or({:error, :not_found}, "default.json")
+"default.json"
+```
 
 *Lazy unwrapping (function only called when needed)*
 
-    Err.unwrap_or_lazy({:error, :enoent}, fn reason ->
-      "Error: #{reason}"
-    end)
-    "Error: enoent"
+```elixir
+iex> Err.unwrap_or_lazy({:error, :enoent}, fn reason -> "Error: #{reason}" end)
+"Error: enoent"
+```
 
 *Transform success values*
 
-    iex> Err.map({:ok, 5}, fn num -> num * 2 end)
-    {:ok, 10}
+```elixir
+iex> Err.map({:ok, 5}, fn num -> num * 2 end)
+{:ok, 10}
+```
 
 *Transform error values*
 
-    iex> Err.map_err({:error, :timeout}, fn reason -> "#{reason}_error" end)
-    {:error, "timeout_error"}
+```elixir
+iex> Err.map_err({:error, :timeout}, fn reason -> "#{reason}_error" end)
+{:error, "timeout_error"}
+```
 
 *Chain operations*
 
-    iex> Err.and_then({:ok, 5}, fn num -> {:ok, num * 2} end)
-    {:ok, 10}
+```elixir
+iex> Err.and_then({:ok, 5}, fn num -> {:ok, num * 2} end)
+{:ok, 10}
+```
 
 *Flatten nested results*
 
-    iex> Err.flatten({:ok, {:ok, 1}})
-    {:ok, 1}
-
+```elixir
+iex> Err.flatten({:ok, {:ok, 1}})
+{:ok, 1}
+```
 
 *Eager fallback*
 
-    iex> Err.or_else({:error, :cache_miss}, {:ok, "disk.db"})
-    {:ok, "disk.db"}
+```elixir
+iex> Err.or_else({:error, :cache_miss}, {:ok, "disk.db"})
+{:ok, "disk.db"}
+```
 
 *Lazy fallback*
 
-    Err.or_else_lazy({:error, :cache_miss}, fn _reason ->
-      {:ok, load_from_disk()}
-    end)
+```elixir
+Err.or_else_lazy({:error, :cache_miss}, fn _reason ->
+  {:ok, load_from_disk()}
+end)
+```
 
 *Combine results (fail fast)*
 
-    iex> Err.all([{:ok, 1}, {:ok, 2}, {:ok, 3}])
-    {:ok, [1, 2, 3]}
+```elixir
+iex> Err.all([{:ok, 1}, {:ok, 2}, {:ok, 3}])
+{:ok, [1, 2, 3]}
 
-    iex> Err.all([{:ok, 1}, {:error, :timeout}])
-    {:error, :timeout}
+iex> Err.all([{:ok, 1}, {:error, :timeout}])
+{:error, :timeout}
+```
 
 *Extract ok values*
 
-    iex> Err.values([{:ok, 1}, {:error, :x}, {:ok, 2}])
-    [1, 2]
+```elixir
+iex> Err.values([{:ok, 1}, {:error, :x}, {:ok, 2}])
+[1, 2]
+```
 
 *Split into ok and error lists*
 
-    iex> Err.partition([{:ok, 1}, {:error, "a"}, {:ok, 2}])
-    {[1, 2], ["a"]}
+```elixir
+iex> Err.partition([{:ok, 1}, {:error, "a"}, {:ok, 2}])
+{[1, 2], ["a"]}
+```
 
 *Check if result is ok*
 
-    def process(result) when Err.is_ok(result) do
-      # handle ok
-    end
+```elixir
+def process(result) when Err.is_ok(result) do
+  # handle ok
+end
+```
 
 *Check if result is error*
 
-    def process(result) when Err.is_err(result) do
-      # handle error
-    end
+```elixir
+def process(result) when Err.is_err(result) do
+  # handle error
+end
+```
 
 ### Real-World Example
 
