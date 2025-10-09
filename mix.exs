@@ -2,7 +2,7 @@ defmodule Err.MixProject do
   use Mix.Project
 
   @source_url "https://github.com/leandrocp/err"
-  @version "0.2.1-dev"
+  @version "0.2.1"
 
   def project do
     [
@@ -44,12 +44,13 @@ defmodule Err.MixProject do
         Changelog: "https://hexdocs.pm/err/changelog.html",
         GitHub: @source_url
       },
-      files: [
-        "mix.exs",
-        "lib",
-        "README.md",
-        "LICENSE",
-        "CHANGELOG.md"
+      files: ~w[
+        mix.exs
+        lib
+        README.md
+        LICENSE
+        CHANGELOG.md
+        usage-rules.md
       ]
     ]
   end
