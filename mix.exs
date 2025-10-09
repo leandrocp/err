@@ -16,7 +16,8 @@ defmodule Err.MixProject do
       aliases: aliases(),
       name: "Err",
       source_url: @source_url,
-      description: "A tiny library for dealing with errors."
+      description:
+        "Tiny library that makes working with tagged {:ok, value} and {:error, reason} tagged tuples more ergonomic and expressive."
     ]
   end
 
