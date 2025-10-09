@@ -11,7 +11,7 @@ It follows a simple design to permit using it in existing codebases without chan
 
 - Tuples `{:ok, _}` (of any size) are considered a success result.
 - Tuples `{:error, _}` (of any size) are considered an error result.
-- `nil` is considered "none" or empty.
+- `nil` is considered "none".
 - Any other value is considered "some" value
 
 Inspired by Rust's [Result](https://doc.rust-lang.org/std/result/enum.Result.html)/[Option](https://doc.rust-lang.org/std/option/enum.Option.html) and Gleam's [result](https://hexdocs.pm/gleam_stdlib/gleam/result.html)/[option](https://hexdocs.pm/gleam_stdlib/gleam/option.html).
