@@ -880,17 +880,10 @@ defmodule Err do
   def or_else_lazy({:error, reason}, fun), do: fun.(reason)
   def or_else_lazy(first, _fun), do: first
 
-  @spec wrap(atom() | keyword()) :: struct()
-  @spec wrap(atom(), keyword()) :: struct()
-  def wrap(exception, opts \\ [])
+  def wrap(term, opts \\ [])
 
-  def wrap(exception, opts) when is_atom(exception) do
-    struct(exception, opts)
-  end
-
-  def wrap(opts, _) do
-    struct(Err.GenericError, opts)
-  end
+  def wrap(term, opts) when is_atom(term), do: struct(term, opts)
+  def wrap(term, _), do: struct(Err.GenericError, term)
 
   @spec message(struct()) :: String.t()
   def message(%_{mod: mod, reason: reason}) when not is_nil(mod) do
