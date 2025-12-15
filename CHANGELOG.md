@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2 - 2025-12-15
+
+### Changed
+- Fix `wrap/2` dialyzer errors
+
 ## 0.2.1 - 2025-10-09
 
 ### Added
