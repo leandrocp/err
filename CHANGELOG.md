@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.3](https://github.com/leandrocp/err/compare/v0.2.2...v0.2.3) (2026-03-30)
+
+
+### Features
+
+* add flow normalization helpers ([4d3eec7](https://github.com/leandrocp/err/commit/4d3eec7f41e5ca75754c1c014b692b1b127953de))
+* add predicate and composition helpers ([#13](https://github.com/leandrocp/err/issues/13)) ([9268b16](https://github.com/leandrocp/err/commit/9268b165891521d8a9b605bd72011898efaec11c))
+* add task result helpers ([ff0386d](https://github.com/leandrocp/err/commit/ff0386d88390a773e13a73d8eca9343bc114c5c1))
+* add task result helpers ([a9f22b5](https://github.com/leandrocp/err/commit/a9f22b5cf7ee79454b3e5a11672d56b5e60f2283))
+
 ## 0.2.2 - 2025-12-15
 
 ### Changed
