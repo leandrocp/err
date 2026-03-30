@@ -119,6 +119,14 @@ defmodule ErrTest do
     assert unwrap_or_lazy("car", fn _ -> :bike end) == "car"
   end
 
+  test "unwrap_err_or" do
+    assert Err.unwrap_err_or({:error, :timeout}, :ok) == :timeout
+    assert Err.unwrap_err_or({:error, :boom, %{code: 500}}, :ok) == [:boom, %{code: 500}]
+    assert Err.unwrap_err_or({:ok, 1}, :ok) == :ok
+    assert Err.unwrap_err_or(nil, :ok) == :ok
+    assert Err.unwrap_err_or("value", :ok) == :ok
+  end
+
   test "and_then" do
     assert and_then({:ok, 100}, fn count -> "#{count} users" end) == "100 users"
 
@@ -155,6 +163,19 @@ defmodule ErrTest do
     assert map_err(nil, fn reason -> "#{reason}_error" end) == nil
   end
 
+  test "ensure" do
+    assert Err.ensure({:ok, 10}, &(&1 > 5), :too_small) == {:ok, 10}
+    assert Err.ensure({:ok, 3}, &(&1 > 5), :too_small) == {:error, :too_small}
+
+    assert Err.ensure({:ok, :user, %{id: 1}}, &(length(&1) == 2), :invalid) ==
+             {:ok, :user, %{id: 1}}
+
+    assert Err.ensure({:error, :timeout}, &(&1 > 5), :too_small) == {:error, :timeout}
+    assert Err.ensure("hello", &(String.length(&1) > 3), :too_short) == "hello"
+    assert Err.ensure("hi", &(String.length(&1) > 3), :too_short) == {:error, :too_short}
+    assert Err.ensure(nil, & &1, :missing) == {:error, :missing}
+  end
+
   test "match" do
     assert Err.match({:ok, 5}, ok: &(&1 * 2), error: fn _ -> 0 end) == 10
     assert Err.match({:error, :timeout}, ok: & &1, error: &inspect/1) == ":timeout"
@@ -180,12 +201,57 @@ defmodule ErrTest do
     refute Err.is_err("error")
   end
 
+  test "is_none" do
+    assert Err.is_none(nil)
+    refute Err.is_none(1)
+    refute Err.is_none({:ok, 1})
+  end
+
+  test "ok_and?" do
+    assert Err.ok_and?({:ok, 10}, &(&1 > 5))
+    refute Err.ok_and?({:ok, 3}, &(&1 > 5))
+    assert Err.ok_and?({:ok, :user, %{id: 1}}, &(length(&1) == 2))
+    refute Err.ok_and?({:error, :timeout}, &(&1 > 5))
+    refute Err.ok_and?("value", &(&1 == "value"))
+  end
+
+  test "err_and?" do
+    assert Err.err_and?({:error, :timeout}, &(&1 == :timeout))
+    refute Err.err_and?({:error, :boom}, &(&1 == :timeout))
+    assert Err.err_and?({:error, :boom, %{code: 500}}, &(length(&1) == 2))
+    refute Err.err_and?({:ok, 1}, &(&1 == :timeout))
+    refute Err.err_and?("value", &(&1 == "value"))
+  end
+
+  test "some_and?" do
+    assert Err.some_and?("hello", &(String.length(&1) > 3))
+    refute Err.some_and?("hi", &(String.length(&1) > 3))
+    refute Err.some_and?(nil, &(String.length(&1) > 3))
+  end
+
   test "flatten" do
     assert Err.flatten({:ok, {:ok, 1}}) == {:ok, 1}
     assert Err.flatten({:ok, {:ok, 1, :meta}}) == {:ok, 1, :meta}
     assert Err.flatten({:ok, {:error, :timeout}}) == {:error, :timeout}
     assert Err.flatten({:error, :failed}) == {:error, :failed}
     assert Err.flatten({:ok, "value"}) == {:ok, "value"}
+  end
+
+  test "followed_by" do
+    assert Err.followed_by({:ok, 1}, {:ok, 2}) == {:ok, 2}
+    assert Err.followed_by({:ok, 1}, {:error, :boom}) == {:error, :boom}
+    assert Err.followed_by({:error, :timeout}, {:ok, 2}) == {:error, :timeout}
+    assert Err.followed_by("primary", "secondary") == "secondary"
+    assert Err.followed_by(nil, "secondary") == nil
+  end
+
+  test "zip" do
+    assert Err.zip({:ok, 1}, {:ok, 2}) == {:ok, {1, 2}}
+    assert Err.zip({:ok, :user, %{id: 1}}, {:ok, :admin}) == {:ok, {[:user, %{id: 1}], :admin}}
+    assert Err.zip({:error, :timeout}, {:ok, 2}) == {:error, :timeout}
+    assert Err.zip({:ok, 1}, {:error, :boom}) == {:error, :boom}
+    assert Err.zip("left", "right") == {"left", "right"}
+    assert Err.zip(nil, "right") == nil
   end
 
   test "all" do
