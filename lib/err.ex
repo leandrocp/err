@@ -392,6 +392,46 @@ defmodule Err do
   def unwrap_or_lazy(other, _default_fun), do: other
 
   @doc """
+  Returns the wrapped error or `default` when the result is ok or value is present.
+
+  For two-element error tuples (`{:error, reason}`) it returns `reason`. When the tuple contains
+  additional metadata, it returns the remaining elements as a list.
+
+  Accepts `nil`, any `{:ok, value}` or `{:error, reason}` tuple (with or without extra metadata),
+  and other terms.
+
+  ## Examples
+
+      iex> Err.unwrap_err_or({:error, :timeout}, :no_error)
+      :timeout
+
+      iex> Err.unwrap_err_or({:error, :boom, %{code: 500}}, :no_error)
+      [:boom, %{code: 500}]
+
+      iex> Err.unwrap_err_or({:ok, 1}, :no_error)
+      :no_error
+
+      iex> Err.unwrap_err_or(nil, :no_error)
+      :no_error
+
+  """
+  @spec unwrap_err_or(value(), any()) :: any()
+  def unwrap_err_or(value, default)
+  def unwrap_err_or(nil, default), do: default
+  def unwrap_err_or({:ok, _}, default), do: default
+  def unwrap_err_or({:error, reason}, _default), do: reason
+
+  def unwrap_err_or(tuple, default) when is_tuple(tuple) do
+    case elem(tuple, 0) do
+      :ok -> default
+      :error -> tuple |> Tuple.delete_at(0) |> Tuple.to_list()
+      _ -> default
+    end
+  end
+
+  def unwrap_err_or(_other, default), do: default
+
+  @doc """
   Returns the wrapped value from an `{:ok, value}` tuple or raises the provided exception.
 
   For two-element result tuples (`{:ok, value}`) it returns `value`. When the tuple contains
@@ -642,6 +682,53 @@ defmodule Err do
   def map_err(other, _fun), do: other
 
   @doc """
+  Ensures the value satisfies `predicate`, otherwise returns `{:error, error}`.
+
+  Existing error tuples are returned unchanged. For successful result tuples the extracted value
+  (or list of values) is passed to `predicate`. For plain values and option-style values, a truthy
+  predicate keeps the original value and a falsy predicate returns `{:error, error}`.
+
+  ## Examples
+
+      iex> Err.ensure({:ok, 10}, &(&1 > 5), :too_small)
+      {:ok, 10}
+
+      iex> Err.ensure({:ok, 3}, &(&1 > 5), :too_small)
+      {:error, :too_small}
+
+      iex> Err.ensure({:error, :timeout}, &(&1 > 5), :too_small)
+      {:error, :timeout}
+
+      iex> Err.ensure("hello", &(String.length(&1) > 3), :too_short)
+      "hello"
+
+      iex> Err.ensure(nil, & &1, :missing)
+      {:error, :missing}
+
+  """
+  @spec ensure(value(), (any() -> any()), any()) :: value()
+  def ensure(value, predicate, error)
+  def ensure(nil, _predicate, error), do: {:error, error}
+
+  def ensure({:ok, value} = ok, predicate, error) do
+    if predicate.(value), do: ok, else: {:error, error}
+  end
+
+  def ensure({:error, _} = result, _predicate, _error), do: result
+
+  def ensure(tuple, predicate, error) when is_tuple(tuple) do
+    case elem(tuple, 0) do
+      :ok -> if predicate.(result_payload(tuple)), do: tuple, else: {:error, error}
+      :error -> tuple
+      _ -> if predicate.(tuple), do: tuple, else: {:error, error}
+    end
+  end
+
+  def ensure(other, predicate, error) do
+    if predicate.(other), do: other, else: {:error, error}
+  end
+
+  @doc """
   Checks if a value is an `{:ok, ...}` result tuple.
 
   Returns `true` for any tuple starting with `:ok`, `false` otherwise.
@@ -733,6 +820,112 @@ defmodule Err do
   defguard is_some(value) when value != nil
 
   @doc """
+  Checks if a value is none (`nil`).
+
+  Returns `true` only for `nil`.
+
+  Allowed in guard tests.
+
+  ## Examples
+
+      iex> Err.is_none(nil)
+      true
+
+      iex> Err.is_none(1)
+      false
+
+      iex> Err.is_none({:ok, 1})
+      false
+
+      def my_function(value) when Err.is_none(value)
+
+  """
+  @spec is_none(any()) :: boolean()
+  defguard is_none(value) when value == nil
+
+  @doc """
+  Returns `true` when the value is an ok result and its payload satisfies `predicate`.
+
+  Returns `false` for non-ok values without calling `predicate`.
+
+  ## Examples
+
+      iex> Err.ok_and?({:ok, 10}, &(&1 > 5))
+      true
+
+      iex> Err.ok_and?({:ok, 3}, &(&1 > 5))
+      false
+
+      iex> Err.ok_and?({:error, :timeout}, &(&1 > 5))
+      false
+
+  """
+  @spec ok_and?(any(), (any() -> any())) :: boolean()
+  def ok_and?(value, predicate)
+  def ok_and?({:ok, payload}, predicate), do: !!predicate.(payload)
+
+  def ok_and?(tuple, predicate) when is_tuple(tuple) do
+    case elem(tuple, 0) do
+      :ok -> !!predicate.(result_payload(tuple))
+      _ -> false
+    end
+  end
+
+  def ok_and?(_other, _predicate), do: false
+
+  @doc """
+  Returns `true` when the value is an error result and its payload satisfies `predicate`.
+
+  Returns `false` for non-error values without calling `predicate`.
+
+  ## Examples
+
+      iex> Err.err_and?({:error, :timeout}, &(&1 == :timeout))
+      true
+
+      iex> Err.err_and?({:error, :boom}, &(&1 == :timeout))
+      false
+
+      iex> Err.err_and?({:ok, 1}, &(&1 == :timeout))
+      false
+
+  """
+  @spec err_and?(any(), (any() -> any())) :: boolean()
+  def err_and?(value, predicate)
+  def err_and?({:error, reason}, predicate), do: !!predicate.(reason)
+
+  def err_and?(tuple, predicate) when is_tuple(tuple) do
+    case elem(tuple, 0) do
+      :error -> !!predicate.(result_payload(tuple))
+      _ -> false
+    end
+  end
+
+  def err_and?(_other, _predicate), do: false
+
+  @doc """
+  Returns `true` when the value is present and satisfies `predicate`.
+
+  Returns `false` for `nil` without calling `predicate`.
+
+  ## Examples
+
+      iex> Err.some_and?("hello", &(String.length(&1) > 3))
+      true
+
+      iex> Err.some_and?("hi", &(String.length(&1) > 3))
+      false
+
+      iex> Err.some_and?(nil, &(String.length(&1) > 3))
+      false
+
+  """
+  @spec some_and?(any(), (any() -> any())) :: boolean()
+  def some_and?(value, predicate)
+  def some_and?(nil, _predicate), do: false
+  def some_and?(other, predicate), do: !!predicate.(other)
+
+  @doc """
   Flattens a nested result into a single layer.
 
   If the outer result is `{:ok, inner}` and inner is also a result tuple,
@@ -770,6 +963,99 @@ defmodule Err do
   end
 
   def flatten(other), do: other
+
+  @doc """
+  Returns the second value if the first one is successful/present.
+
+  For Result types (`{:ok, value}` or `{:error, reason}`), returns the second value if the first
+  is `{:ok, _}`, otherwise returns the first error unchanged.
+
+  For Option types (`nil` or any value), returns the second value if the first is not `nil`,
+  otherwise returns `nil`.
+
+  ## Examples
+
+      iex> Err.followed_by({:ok, 1}, {:ok, 2})
+      {:ok, 2}
+
+      iex> Err.followed_by({:ok, 1}, {:error, :boom})
+      {:error, :boom}
+
+      iex> Err.followed_by({:error, :timeout}, {:ok, 2})
+      {:error, :timeout}
+
+      iex> Err.followed_by("primary", "secondary")
+      "secondary"
+
+      iex> Err.followed_by(nil, "secondary")
+      nil
+
+  """
+  @spec followed_by(value(), value()) :: value()
+  def followed_by(first, second)
+  def followed_by(nil, _second), do: nil
+  def followed_by({:ok, _}, second), do: second
+  def followed_by({:error, _} = first, _second), do: first
+
+  def followed_by(tuple, second) when is_tuple(tuple) do
+    case elem(tuple, 0) do
+      :ok -> second
+      :error -> tuple
+      _ -> second
+    end
+  end
+
+  def followed_by(_first, second), do: second
+
+  @doc """
+  Combines two successful/present values into a pair.
+
+  For Result types, returns the first error encountered. When both values are ok, their extracted
+  payloads are returned inside `{:ok, {left, right}}`.
+
+  For Option types, returns `{left, right}` when both values are present. If either side is `nil`,
+  returns `nil`.
+
+  ## Examples
+
+      iex> Err.zip({:ok, 1}, {:ok, 2})
+      {:ok, {1, 2}}
+
+      iex> Err.zip({:ok, :user, %{id: 1}}, {:ok, :admin})
+      {:ok, {[:user, %{id: 1}], :admin}}
+
+      iex> Err.zip({:error, :timeout}, {:ok, 2})
+      {:error, :timeout}
+
+      iex> Err.zip("left", "right")
+      {"left", "right"}
+
+      iex> Err.zip(nil, "right")
+      nil
+
+  """
+  @spec zip(value(), value()) :: value()
+  def zip(left, right)
+  def zip(nil, _right), do: nil
+  def zip(_left, nil), do: nil
+  def zip({:error, _} = error, _right), do: error
+  def zip(_left, {:error, _} = error), do: error
+  def zip({:ok, left}, {:ok, right}), do: {:ok, {left, right}}
+
+  def zip(left, right) when is_tuple(left) and is_tuple(right) do
+    case {elem(left, 0), elem(right, 0)} do
+      {:error, _} -> left
+      {_, :error} -> right
+      {:ok, :ok} -> {:ok, {result_payload(left), result_payload(right)}}
+      {:ok, _} -> {:ok, {result_payload(left), right}}
+      {_, :ok} -> {:ok, {left, result_payload(right)}}
+      _ -> {left, right}
+    end
+  end
+
+  def zip({:ok, left}, right), do: {:ok, {left, right}}
+  def zip(left, {:ok, right}), do: {:ok, {left, right}}
+  def zip(left, right), do: {left, right}
 
   @doc """
   Combines a list of values into a single result.
