@@ -65,6 +65,32 @@ defmodule ErrTest do
              {:error, %{message: "boom"}}
   end
 
+  test "async and await" do
+    assert Err.async(fn -> 1 + 2 end) |> Err.await() == {:ok, 3}
+    assert Err.async(fn -> {:ok, :cached} end) |> Err.await() == {:ok, :cached}
+
+    assert Err.async(fn -> raise "boom" end) |> Err.await() |> Err.map_err(&Exception.message/1) ==
+             {:error, "boom"}
+
+    assert Task.async(fn -> {:error, :not_found} end) |> Err.await() == {:error, :not_found}
+
+    assert Task.async(fn -> Process.sleep(50) end) |> Err.await(0) == {:error, :timeout}
+  end
+
+  test "await_many" do
+    tasks = [
+      Task.async(fn -> 1 end),
+      Task.async(fn -> {:ok, 2} end),
+      Task.async(fn -> {:error, :boom} end)
+    ]
+
+    assert Err.await_many(tasks) == [{:ok, 1}, {:ok, 2}, {:error, :boom}]
+
+    slow_tasks = [Task.async(fn -> Process.sleep(50) end)]
+
+    assert Err.await_many(slow_tasks, 0) == [{:error, :timeout}]
+  end
+
   test "unwrap_or" do
     assert unwrap_or(nil, :not_found) == :not_found
     assert unwrap_or({:ok, 1}, :error) == 1

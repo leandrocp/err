@@ -218,6 +218,91 @@ defmodule Err do
   end
 
   @doc """
+  Starts a task and normalizes its return value into a result.
+
+  Plain values are wrapped as `{:ok, value}`. Existing result tuples are returned unchanged.
+  Rescued exceptions become `{:error, exception}`. Throws and exits are returned as tagged errors.
+
+  This is useful when adapting `Task`-based work into the same result flow used by synchronous
+  code.
+
+  ## Examples
+
+      iex> task = Err.async(fn -> 40 + 2 end)
+      iex> Err.await(task)
+      {:ok, 42}
+
+      iex> task = Err.async(fn -> {:ok, :cached} end)
+      iex> Err.await(task)
+      {:ok, :cached}
+
+      iex> task = Err.async(fn -> raise "boom" end)
+      iex> Err.await(task) |> Err.map_err(&Exception.message/1)
+      {:error, "boom"}
+
+  """
+  @spec async((-> any())) :: Task.t()
+  def async(fun) when is_function(fun, 0) do
+    Task.async(fn ->
+      try do
+        normalize_result(fun.())
+      rescue
+        error -> {:error, error}
+      catch
+        :exit, reason -> {:error, {:exit, reason}}
+        :throw, reason -> {:error, {:throw, reason}}
+      end
+    end)
+  end
+
+  @doc """
+  Awaits a task and converts its outcome into a result without exiting the caller.
+
+  Plain task replies are wrapped as `{:ok, value}`. Existing result tuples are returned unchanged.
+  If the task exits, returns `{:error, {:exit, reason}}`. If the timeout is reached, the task is
+  shut down and `{:error, :timeout}` is returned.
+
+  ## Examples
+
+      iex> Task.async(fn -> 21 * 2 end) |> Err.await()
+      {:ok, 42}
+
+      iex> Task.async(fn -> {:error, :not_found} end) |> Err.await()
+      {:error, :not_found}
+
+  """
+  @spec await(Task.t(), timeout()) :: result()
+  def await(task, timeout \\ 5000) do
+    task
+    |> Task.yield(timeout)
+    |> fallback_task_result(task)
+    |> normalize_task_reply()
+  end
+
+  @doc """
+  Awaits multiple tasks and converts each outcome into a result without exiting the caller.
+
+  Results are returned in the same order as the input tasks. Each reply follows the same
+  normalization rules as `await/2`.
+
+  ## Examples
+
+      iex> [Task.async(fn -> 1 end), Task.async(fn -> {:error, :boom} end)] |> Err.await_many()
+      [{:ok, 1}, {:error, :boom}]
+
+  """
+  @spec await_many([Task.t()], timeout()) :: [result()]
+  def await_many(tasks, timeout \\ 5000) do
+    tasks
+    |> Task.yield_many(timeout: timeout)
+    |> Enum.map(fn {task, reply} ->
+      reply
+      |> fallback_task_result(task)
+      |> normalize_task_reply()
+    end)
+  end
+
+  @doc """
   Returns the wrapped `value` or `default` when the result is error or value is empty.
 
   For two-element result tuples (`{:ok, value}`) it returns `value`. When the tuple
@@ -1098,6 +1183,27 @@ defmodule Err do
   def message(exception) do
     Exception.message(exception)
   end
+
+  defp fallback_task_result(nil, task), do: Task.shutdown(task, :brutal_kill)
+  defp fallback_task_result(reply, _task), do: reply
+
+  defp normalize_task_reply({:ok, value}), do: normalize_result(value)
+  defp normalize_task_reply({:exit, :timeout}), do: {:error, :timeout}
+  defp normalize_task_reply({:exit, reason}), do: {:error, {:exit, reason}}
+  defp normalize_task_reply(nil), do: {:error, :timeout}
+
+  defp normalize_result({:ok, _} = ok), do: ok
+  defp normalize_result({:error, _} = error), do: error
+
+  defp normalize_result(tuple) when is_tuple(tuple) do
+    case elem(tuple, 0) do
+      :ok -> tuple
+      :error -> tuple
+      _ -> {:ok, tuple}
+    end
+  end
+
+  defp normalize_result(other), do: {:ok, other}
 
   defp result_payload({_, value}), do: value
   defp result_payload(tuple), do: tuple |> Tuple.delete_at(0) |> Tuple.to_list()
