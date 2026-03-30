@@ -12,6 +12,59 @@ defmodule ErrTest do
     assert Err.error(1 + 2) == {:error, 3}
   end
 
+  test "from_nil" do
+    assert Err.from_nil("config.json", :not_found) == {:ok, "config.json"}
+    assert Err.from_nil(nil, :not_found) == {:error, :not_found}
+    assert Err.from_nil({:ok, 1}, :not_found) == {:ok, 1}
+    assert Err.from_nil({:error, :timeout}, :not_found) == {:error, :timeout}
+    assert Err.from_nil({:custom, 1}, :not_found) == {:ok, {:custom, 1}}
+  end
+
+  test "tap" do
+    assert Err.tap({:ok, 5}, fn value -> send(self(), {:seen, value}) end) == {:ok, 5}
+    assert_received {:seen, 5}
+
+    assert Err.tap({:ok, :user, %{id: 1}}, fn values -> send(self(), {:seen_many, values}) end) ==
+             {:ok, :user, %{id: 1}}
+
+    assert_received {:seen_many, [:user, %{id: 1}]}
+
+    assert Err.tap({:error, :timeout}, fn _ -> send(self(), :unexpected) end) ==
+             {:error, :timeout}
+
+    assert Err.tap(nil, fn _ -> send(self(), :unexpected) end) == nil
+    refute_received :unexpected
+  end
+
+  test "tap_err" do
+    assert Err.tap_err({:error, :timeout}, fn reason -> send(self(), {:seen_error, reason}) end) ==
+             {:error, :timeout}
+
+    assert_received {:seen_error, :timeout}
+
+    assert Err.tap_err({:error, :boom, %{code: 500}}, fn values ->
+             send(self(), {:seen_many_error, values})
+           end) == {:error, :boom, %{code: 500}}
+
+    assert_received {:seen_many_error, [:boom, %{code: 500}]}
+
+    assert Err.tap_err({:ok, 1}, fn _ -> send(self(), :unexpected) end) == {:ok, 1}
+    assert Err.tap_err(nil, fn _ -> send(self(), :unexpected) end) == nil
+    refute_received :unexpected
+  end
+
+  test "try_rescue" do
+    assert Err.try_rescue(fn -> 1 + 2 end) == {:ok, 3}
+
+    assert Err.try_rescue(fn -> raise "boom" end) |> Err.map_err(&Exception.message/1) ==
+             {:error, "boom"}
+
+    assert Err.try_rescue(fn -> raise "boom" end, fn error ->
+             %{message: Exception.message(error)}
+           end) ==
+             {:error, %{message: "boom"}}
+  end
+
   test "unwrap_or" do
     assert unwrap_or(nil, :not_found) == :not_found
     assert unwrap_or({:ok, 1}, :error) == 1
@@ -74,6 +127,15 @@ defmodule ErrTest do
 
     assert map_err({:ok, "success"}, fn reason -> "#{reason}_error" end) == {:ok, "success"}
     assert map_err(nil, fn reason -> "#{reason}_error" end) == nil
+  end
+
+  test "match" do
+    assert Err.match({:ok, 5}, ok: &(&1 * 2), error: fn _ -> 0 end) == 10
+    assert Err.match({:error, :timeout}, ok: & &1, error: &inspect/1) == ":timeout"
+    assert Err.match(nil, ok: & &1, error: fn _ -> :missing end) == :missing
+
+    assert Err.match({:ok, :user, %{id: 1}}, ok: &Enum.reverse/1, error: fn _ -> :error end) ==
+             [%{id: 1}, :user]
   end
 
   test "is_ok" do
