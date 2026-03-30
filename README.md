@@ -30,6 +30,7 @@ Use it to:
 - Works with existing `:ok` / `:error` tuples of any size
 - Treats `nil` as absence for Option-style flows
 - Normalizes values into result flows with `from_nil/2` and `try_rescue/2`
+- Wraps `Task` work with `async/1`, `await/2`, and `await_many/2`
 - Composes success and error paths with `map/2`, `map_err/2`, `and_then/2`, and `or_else/2`
 - Adds side effects without changing values using `tap/2` and `tap_err/2`
 - Keeps branching explicit with `match/2`
@@ -92,6 +93,17 @@ iex> Err.try_rescue(fn -> 100 + 23 end)
 
 iex> Err.try_rescue(fn -> raise "boom" end) |> Err.map_err(&Exception.message/1)
 {:error, "boom"}
+```
+
+*Run Task work through results*
+
+```elixir
+iex> task = Err.async(fn -> 40 + 2 end)
+iex> Err.await(task)
+{:ok, 42}
+
+iex> [Task.async(fn -> 1 end), Task.async(fn -> {:error, :boom} end)] |> Err.await_many()
+[{:ok, 1}, {:error, :boom}]
 ```
 
 *Unwrap with defaults*
