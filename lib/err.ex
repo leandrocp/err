@@ -61,6 +61,163 @@ defmodule Err do
   def error(value), do: {:error, value}
 
   @doc """
+  Normalizes a nullable value into a result.
+
+  Returns `{:ok, value}` for any non-`nil` value. Returns `{:error, reason}` when the value is
+  `nil`. Existing result tuples are returned unchanged.
+
+  This is useful for adapting APIs such as `Repo.get/2` that return `nil` on absence into flows
+  that work naturally with `with`, `map_err/2`, and `or_else/2`.
+
+  ## Examples
+
+      iex> Err.from_nil("config.json", :not_found)
+      {:ok, "config.json"}
+
+      iex> Err.from_nil(nil, :not_found)
+      {:error, :not_found}
+
+      iex> Err.from_nil({:ok, 1}, :not_found)
+      {:ok, 1}
+
+      iex> Err.from_nil({:error, :timeout}, :not_found)
+      {:error, :timeout}
+
+  """
+  @spec from_nil(value(), any()) :: result()
+  def from_nil(value, error)
+  def from_nil(nil, error), do: {:error, error}
+  def from_nil({:ok, _} = ok, _error), do: ok
+  def from_nil({:error, _} = error, _fallback), do: error
+
+  def from_nil(tuple, _error) when is_tuple(tuple) do
+    case elem(tuple, 0) do
+      :ok -> tuple
+      :error -> tuple
+      _ -> {:ok, tuple}
+    end
+  end
+
+  def from_nil(other, _error), do: {:ok, other}
+
+  @doc """
+  Calls `fun` with the success value and returns the original value unchanged.
+
+  This is useful for logging, tracing, or other side effects in a flow without changing the
+  wrapped value.
+
+  ## Examples
+
+      iex> Err.tap({:ok, 5}, fn value -> send(self(), {:seen, value}) end)
+      {:ok, 5}
+
+      iex> Err.tap({:error, :timeout}, fn _ -> raise "should not run" end)
+      {:error, :timeout}
+
+      iex> Err.tap(nil, fn _ -> raise "should not run" end)
+      nil
+
+  """
+  @spec tap(value(), (any() -> any())) :: value()
+  def tap(value, fun)
+  def tap(nil, _fun), do: nil
+
+  def tap({:ok, value} = ok, fun) do
+    fun.(value)
+    ok
+  end
+
+  def tap({:error, _} = error, _fun), do: error
+
+  def tap(tuple, fun) when is_tuple(tuple) do
+    case elem(tuple, 0) do
+      :ok ->
+        fun.(result_payload(tuple))
+        tuple
+
+      :error ->
+        tuple
+
+      _ ->
+        fun.(tuple)
+        tuple
+    end
+  end
+
+  def tap(other, fun) do
+    fun.(other)
+    other
+  end
+
+  @doc """
+  Calls `fun` with the error value and returns the original value unchanged.
+
+  This is useful for logging, tracing, or metrics on error paths without changing the error.
+
+  ## Examples
+
+      iex> Err.tap_err({:error, :timeout}, fn reason -> send(self(), {:seen_error, reason}) end)
+      {:error, :timeout}
+
+      iex> Err.tap_err({:ok, 5}, fn _ -> raise "should not run" end)
+      {:ok, 5}
+
+      iex> Err.tap_err(nil, fn _ -> raise "should not run" end)
+      nil
+
+  """
+  @spec tap_err(value(), (any() -> any())) :: value()
+  def tap_err(value, fun)
+  def tap_err(nil, _fun), do: nil
+  def tap_err({:ok, _} = ok, _fun), do: ok
+
+  def tap_err({:error, reason} = error, fun) do
+    fun.(reason)
+    error
+  end
+
+  def tap_err(tuple, fun) when is_tuple(tuple) do
+    case elem(tuple, 0) do
+      :error ->
+        fun.(result_payload(tuple))
+        tuple
+
+      _ ->
+        tuple
+    end
+  end
+
+  def tap_err(other, _fun), do: other
+
+  @doc """
+  Executes `fun` and converts rescued exceptions into an error result.
+
+  Returns `{:ok, value}` when the function succeeds. If the function raises, returns
+  `{:error, exception}` by default or `{:error, mapper.(exception)}` when a mapper is provided.
+
+  This is useful at library boundaries where a raising API needs to be adapted into a result flow.
+
+  ## Examples
+
+      iex> Err.try_rescue(fn -> 100 + 23 end)
+      {:ok, 123}
+
+      iex> Err.try_rescue(fn -> raise "boom" end) |> Err.map_err(&Exception.message/1)
+      {:error, "boom"}
+
+      iex> Err.try_rescue(fn -> raise "boom" end, fn error -> %{kind: :runtime_error, message: Exception.message(error)} end)
+      {:error, %{kind: :runtime_error, message: "boom"}}
+
+  """
+  @spec try_rescue((-> any())) :: result()
+  @spec try_rescue((-> any()), (Exception.t() -> any())) :: result()
+  def try_rescue(fun, rescue_fun \\ fn error -> error end) when is_function(fun, 0) do
+    {:ok, fun.()}
+  rescue
+    error -> {:error, rescue_fun.(error)}
+  end
+
+  @doc """
   Returns the wrapped `value` or `default` when the result is error or value is empty.
 
   For two-element result tuples (`{:ok, value}`) it returns `value`. When the tuple
@@ -305,6 +462,54 @@ defmodule Err do
   end
 
   def map(other, fun), do: fun.(other)
+
+  @doc """
+  Matches on success/presence and error/absence with explicit handlers.
+
+  Existing result tuples dispatch to `:ok` or `:error`. `nil` dispatches to `:error`. Any other
+  non-`nil` value dispatches to `:ok`.
+
+  ## Examples
+
+      iex> Err.match({:ok, 5}, ok: &(&1 * 2), error: fn _ -> 0 end)
+      10
+
+      iex> Err.match({:error, :timeout}, ok: & &1, error: &inspect/1)
+      ":timeout"
+
+      iex> Err.match(nil, ok: & &1, error: fn _ -> :missing end)
+      :missing
+
+      iex> Err.match("value", ok: &String.upcase/1, error: fn _ -> :missing end)
+      "VALUE"
+
+  """
+  @spec match(value(), ok: (any() -> any()), error: (any() -> any())) :: any()
+  def match(value, handlers) when is_list(handlers) do
+    ok_fun = Keyword.fetch!(handlers, :ok)
+    error_fun = Keyword.fetch!(handlers, :error)
+
+    case value do
+      nil ->
+        error_fun.(nil)
+
+      {:ok, payload} ->
+        ok_fun.(payload)
+
+      {:error, reason} ->
+        error_fun.(reason)
+
+      tuple when is_tuple(tuple) ->
+        case elem(tuple, 0) do
+          :ok -> ok_fun.(result_payload(tuple))
+          :error -> error_fun.(result_payload(tuple))
+          _ -> ok_fun.(tuple)
+        end
+
+      other ->
+        ok_fun.(other)
+    end
+  end
 
   @doc """
   Transforms the error inside an `{:error, reason}` tuple by applying a function to it.
@@ -893,4 +1098,7 @@ defmodule Err do
   def message(exception) do
     Exception.message(exception)
   end
+
+  defp result_payload({_, value}), do: value
+  defp result_payload(tuple), do: tuple |> Tuple.delete_at(0) |> Tuple.to_list()
 end

@@ -17,7 +17,7 @@ defmodule Err.MixProject do
       name: "Err",
       source_url: @source_url,
       description:
-        "Tiny library that makes working with tagged {:ok, value} and {:error, reason} tagged tuples more ergonomic and expressive."
+        "Tiny library for composing and normalizing Elixir error flows with existing {:ok, value}, {:error, reason}, and nil conventions."
     ]
   end
 
@@ -67,7 +67,8 @@ defmodule Err.MixProject do
 
   defp deps do
     [
-      {:ex_doc, ">= 0.0.0", only: :docs}
+      {:ex_doc, ">= 0.0.0", only: :docs},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
 

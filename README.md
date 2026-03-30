@@ -5,26 +5,36 @@
 
 <!-- MDOC -->
 
-**Err** is a tiny library that makes working with tagged `{:ok, value}` and `{:error, reason}` tagged tuples more ergonomic and expressive in Elixir.
+**Error handling for Elixir. Let it flow.**
 
-It follows a simple design to permit using it in existing codebases without changing existing code:
+`Err` is a tiny library for composing and normalizing error flows in Elixir.
 
-- Tuples `{:ok, _}` (of any size) are considered a success result.
-- Tuples `{:error, _}` (of any size) are considered an error result.
-- `nil` is considered "none".
-- Any other value is considered "some" value
+It works with the conventions Elixir developers already use:
 
-Inspired by Rust's [Result](https://doc.rust-lang.org/std/result/enum.Result.html)/[Option](https://doc.rust-lang.org/std/option/enum.Option.html) and Gleam's [result](https://hexdocs.pm/gleam_stdlib/gleam/result.html)/[option](https://hexdocs.pm/gleam_stdlib/gleam/option.html).
+- `{:ok, value}` and `{:error, reason}`
+- `nil` as absence
+- existing return values from Phoenix, Ecto, Oban, and your own code
+
+Instead of introducing a new result type or DSL, `Err` helps turn mixed return styles into
+flows that are easier to compose, transform, and reason about.
+
+Use it to:
+
+- compose result pipelines cleanly
+- normalize `nil`, tuples, and exception-based APIs
+- transform errors close to the boundary
+- keep `with`-based application code readable
 
 ## Features
 
-- ⛓ **Composable** - Chain operations with `map`, `and_then`, `or_else`
-- 🔌 **Drop-in compatibility** - Handles existing tagged tuples `:ok`/`:error` of any size and `nil` values. No need to introduce `%Result{}` structs or special atoms.
-- ✨ **Just functions** - No complex custom pipe operators or DSL
-- 🪶 **Zero dependencies** - Lightweight and fast
-- 📦 **List operations** - Combine results with `all`, extract with `values`, split with `partition`
-- ⚡ **Lazy evaluation** - Avoid computation with `_lazy` variants
-- 🔄 **Transformations** - Replace, flatten, and transform results
+- Works with existing `:ok` / `:error` tuples of any size
+- Treats `nil` as absence for Option-style flows
+- Normalizes values into result flows with `from_nil/2` and `try_rescue/2`
+- Composes success and error paths with `map/2`, `map_err/2`, `and_then/2`, and `or_else/2`
+- Adds side effects without changing values using `tap/2` and `tap_err/2`
+- Keeps branching explicit with `match/2`
+- Includes list helpers like `all/1`, `values/1`, and `partition/1`
+- Ships with exception helpers like `wrap/1` and `message/1`
 
 ## Installation
 
@@ -38,6 +48,20 @@ def deps do
 end
 ```
 
+## Why Err?
+
+Elixir already has excellent primitives for error handling: pattern matching, `with`, `case`,
+and tagged tuples.
+
+The friction usually starts when application code combines several styles from several libraries:
+
+- `Repo.get/2` returns `nil`
+- `Repo.insert/2` returns `{:ok, struct}` or `{:error, changeset}`
+- some APIs raise exceptions
+- others return custom tuples or atoms
+
+`Err` is a small glue layer for normalizing those differences.
+
 ## Usage
 
 *Wrap values*
@@ -50,6 +74,26 @@ iex> Err.error(:timeout)
 {:error, :timeout}
 ```
 
+*Normalize `nil` into a result*
+
+```elixir
+iex> Err.from_nil("config.json", :not_found)
+{:ok, "config.json"}
+
+iex> Err.from_nil(nil, :not_found)
+{:error, :not_found}
+```
+
+*Convert raising code into a result*
+
+```elixir
+iex> Err.try_rescue(fn -> 100 + 23 end)
+{:ok, 123}
+
+iex> Err.try_rescue(fn -> raise "boom" end) |> Err.map_err(&Exception.message/1)
+{:error, "boom"}
+```
+
 *Unwrap with defaults*
 
 ```elixir
@@ -58,13 +102,6 @@ iex> Err.unwrap_or({:ok, "config.json"}, "default.json")
 
 iex> Err.unwrap_or({:error, :not_found}, "default.json")
 "default.json"
-```
-
-*Lazy unwrapping (function only called when needed)*
-
-```elixir
-iex> Err.unwrap_or_lazy({:error, :enoent}, fn reason -> "Error: #{reason}" end)
-"Error: enoent"
 ```
 
 *Transform success values*
@@ -88,6 +125,26 @@ iex> Err.and_then({:ok, 5}, fn num -> {:ok, num * 2} end)
 {:ok, 10}
 ```
 
+*Add side effects without changing the result*
+
+```elixir
+iex> Err.tap({:ok, 5}, fn value -> send(self(), {:seen, value}) end)
+{:ok, 5}
+
+iex> Err.tap_err({:error, :timeout}, fn reason -> send(self(), {:seen_error, reason}) end)
+{:error, :timeout}
+```
+
+*Branch explicitly at the boundary*
+
+```elixir
+iex> Err.match({:ok, 5}, ok: &(&1 * 2), error: fn _ -> 0 end)
+10
+
+iex> Err.match(nil, ok: & &1, error: fn _ -> :missing end)
+:missing
+```
+
 *Flatten nested results*
 
 ```elixir
@@ -105,9 +162,8 @@ iex> Err.or_else({:error, :cache_miss}, {:ok, "disk.db"})
 *Lazy fallback*
 
 ```elixir
-Err.or_else_lazy({:error, :cache_miss}, fn _reason ->
-  {:ok, load_from_disk()}
-end)
+iex> Err.or_else_lazy({:error, :cache_miss}, fn _reason -> {:ok, "disk.db"} end)
+{:ok, "disk.db"}
 ```
 
 *Combine results (fail fast)*
@@ -138,7 +194,7 @@ iex> Err.partition([{:ok, 1}, {:error, "a"}, {:ok, 2}])
 
 ```elixir
 def process(result) when Err.is_ok(result) do
-  # handle ok
+  result
 end
 ```
 
@@ -146,20 +202,20 @@ end
 
 ```elixir
 def process(result) when Err.is_err(result) do
-  # handle error
+  result
 end
 ```
 
-### Real-World Example
+## Real-World Example
 
 ```elixir
-def fetch_user_profile(user_id) do
-  user_id
-  |> fetch_user()
-  |> Err.and_then(&load_profile/1)
-  |> Err.and_then(&enrich_with_stats/1)
-  |> Err.or_else_lazy(fn _error ->
-    {:ok, %{name: "Guest", stats: %{}}}
-  end)
+def fetch_user_profile(id) do
+  with {:ok, user} <- Repo.get(User, id) |> Err.from_nil(:not_found),
+       {:ok, account} <- Accounts.fetch_account(user) |> Err.map_err(&normalize_error/1),
+       {:ok, stats} <- Stats.fetch(account) |> Err.map_err(&normalize_error/1) do
+    {:ok, %{user: user, account: account, stats: stats}}
+  end
 end
 ```
+
+`Err` complements `with`, `case`, and pattern matching. It does not try to replace them.
