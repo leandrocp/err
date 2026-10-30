@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.4](https://github.com/leandrocp/err/compare/v0.2.3...v0.2.4) (2026-10-30)
+
+### Other Changes
+
+- Adopt GitHub Actions workflow dependency lockfile in [\#22](https://github.com/leandrocp/err/pull/22)
+
 ## [0.2.3](https://github.com/leandrocp/err/compare/v0.2.2...v0.2.3) (2026-03-30)
 
 
